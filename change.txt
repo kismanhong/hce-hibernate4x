@@ -1,0 +1,13 @@
+version 0.0.3-SNAPSHOT
+- query using "*", by using "*" means all of the columns from the class will be queried, 
+  use @Ignore to ignore the columns you don't want to select
+  
+version 0.0.4-SNAPSHOT
+- bug fix select DetachedCriteria Using "*"
+- field with @Transient or @Ignore will not be included
+- static and static final will not be included
+
+version 0.0.5-SNAPSHOT
+- add eqProperty feature
+- refactor restrictionRestrict
+- compare property join builder
