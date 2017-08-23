@@ -14,6 +14,7 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <spring.version>4.1.6.RELEASE</spring.version>
+    <hibernate.version>4.3.11.Final</hibernate.version>
   </properties>
 
   <dependencies>
@@ -40,12 +41,12 @@
     <dependency>
         <groupId>org.hibernate</groupId>
         <artifactId>hibernate-core</artifactId>
-        <version>4.2.0.Final</version>
+        <version>${hibernate.version}</version>
     </dependency>
     <dependency>
 	    <groupId>org.hibernate</groupId>
 	    <artifactId>hibernate-entitymanager</artifactId>
-	    <version>4.2.0.Final</version>
+	    <version>${hibernate.version}</version>
 	</dependency>
 	<dependency>
 	    <groupId>com.h2database</groupId>
@@ -90,7 +91,13 @@
          <groupId>org.reflections</groupId>
          <artifactId>reflections</artifactId>
          <version>0.9.8</version>
-    </dependency>
+         <exclusions>
+         	<exclusion>
+         		<artifactId>javassist</artifactId>
+         		<groupId>javassist</groupId>
+         	</exclusion>
+         </exclusions>
+	</dependency>
     <dependency>
 		<groupId>org.jdom</groupId>
 		<artifactId>jdom</artifactId>

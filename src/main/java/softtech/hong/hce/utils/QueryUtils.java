@@ -73,7 +73,8 @@ public class QueryUtils {
 	private static final String WHERE_PREFIX = "_";
 	
 	private static final String[] javaType = {"class java.lang.Double", "class java.lang.Integer", "class java.lang.Long", "class java.lang.Float", "class java.lang.Short", 
-		"class java.lang.String", "class java.util.Date", "class java.lang.Integer", "class java.lang.Boolean", "boolean", "double", "int", "float", "number", "short"  };
+		"class java.lang.String", "class java.util.Date", "class java.lang.Integer", "class java.lang.Boolean", "boolean", "double", "int", "float", "number", "short", 
+		"class java.sql.Time", "Time"};
 	
 	private static QueryUtils instance = null;
 
@@ -355,7 +356,7 @@ public class QueryUtils {
 						throw new HCEErrorException("Projection Count for syntax "+property+" is invalid, e.g : count(name)->cnt or $name->cnt => " +
 								"name = property to be count, cnt = field to be alias");
 					}
-					property = StringUtils.substringBetween("count(", ")").trim();
+					property = StringUtils.substringBetween(property, "count(", ")").trim();
 					property = StringUtils.remove(property, COUNT_).trim();			
 					projectionList.add(Projections.count(getProperty(property)), separateProperties[1]);
 				}else if(StringUtils.startsWith(property, SUM) || StringUtils.startsWith(property, SUM_)){
@@ -364,7 +365,7 @@ public class QueryUtils {
 						throw new HCEErrorException("Projection Sum for syntax "+property+" is invalid, e.g : sum(amount)->sm or ^amount->sm => " +
 								"amount = property to be sum, sm = field to be alias");
 					}
-					property = StringUtils.substringBetween("sum(", ")").trim();
+					property = StringUtils.substringBetween(property, "sum(", ")").trim();
 					property = StringUtils.remove(property, SUM_).trim();			
 					projectionList.add(Projections.sum(getProperty(property)), separateProperties[1]);
 				}else if(StringUtils.startsWith(property, AVG) || StringUtils.startsWith(property, AVG_)){
@@ -373,7 +374,7 @@ public class QueryUtils {
 						throw new HCEErrorException("Projection Avg for syntax "+property+" is invalid, e.g : avg(amount)->average or @amount->average => " +
 								"amount = property to be average, average = field to be alias");
 					}
-					property = StringUtils.substringBetween("avg(", ")").trim();
+					property = StringUtils.substringBetween(property, "avg(", ")").trim();
 					property = StringUtils.remove(property, AVG_).trim();			
 					projectionList.add(Projections.avg(getProperty(property)), separateProperties[1]);
 				}else if(StringUtils.startsWith(property, MAX) || StringUtils.startsWith(property, MAX_)){
@@ -382,7 +383,7 @@ public class QueryUtils {
 						throw new HCEErrorException("Projection Max for syntax "+property+" is invalid, e.g : max(amount)->mx or +amount->mx => " +
 								"amount = property to be max, mx = field to be alias");
 					}
-					property = StringUtils.substringBetween("max(", ")").trim();
+					property = StringUtils.substringBetween(property, "max(", ")").trim();
 					property = StringUtils.remove(property, MAX_).trim();			
 					projectionList.add(Projections.max(getProperty(property)), separateProperties[1]);
 				}else if(StringUtils.startsWith(property, MIN) || StringUtils.startsWith(property, MIN_)){
@@ -391,7 +392,7 @@ public class QueryUtils {
 						throw new HCEErrorException("Projection Min for syntax "+property+" is invalid, e.g : min(amount)->mn or -amount->mn => " +
 								"amount = property to be min, mn = field to be alias");
 					}
-					property = StringUtils.substringBetween("min(", ")").trim();
+					property = StringUtils.substringBetween(property, "min(", ")").trim();
 					property = StringUtils.remove(property, MIN_).trim();			
 					projectionList.add(Projections.min(getProperty(property)), separateProperties[1]);
 				}else if(StringUtils.startsWith(property, GROUP_BY) || StringUtils.startsWith(property, GROUP_BY_)){
@@ -400,7 +401,7 @@ public class QueryUtils {
 						throw new HCEErrorException("Projection Group By for syntax "+property+" is invalid, e.g : groupBy(country)->gb or #country->gb => " +
 								"country = property to be group by, gb = field to be alias");
 					}
-					property = StringUtils.substringBetween("groupBy(", ")").trim();
+					property = StringUtils.substringBetween(property, "groupBy(", ")").trim();
 					property = StringUtils.remove(property, GROUP_BY_).trim();			
 					projectionList.add(Projections.groupProperty(getProperty(property)), separateProperties[1]);
 				}else{
@@ -422,16 +423,85 @@ public class QueryUtils {
 		String newProperty = null;
 		int i =0;
 		for (String property : properties) {
-			separateProperties = StringUtils.split(property,".");
-			if(separateProperties.length > 2){
-				newProperty = getProperty(separateProperties);			
-			}else if(separateProperties.length == 2){
-				newProperty = getPropertyRemark(separateProperties);
+			if(StringUtils.startsWith(property, COUNT) || StringUtils.startsWith(property, COUNT_)){
+				separateProperties = StringUtils.split(property, ALIAS_TO);
+				if(separateProperties.length < 2){
+					throw new HCEErrorException("Projection Count for syntax "+property+" is invalid, e.g : count(name)->cnt or $name->cnt => " +
+							"name = property to be count, cnt = field to be alias");
+				}
+				property = StringUtils.substringBetween(property,"count(", ")").trim();
+				property = StringUtils.remove(property, COUNT_).trim();			
+				projectionList.add(Projections.count(getProperty(property)), separateProperties[1]);
+			}else if(StringUtils.startsWith(property, SUM) || StringUtils.startsWith(property, SUM_)){
+				separateProperties = StringUtils.split(property, ALIAS_TO);
+				if(separateProperties.length < 2){
+					throw new HCEErrorException("Projection Sum for syntax "+property+" is invalid, e.g : sum(amount)->sm or ^amount->sm => " +
+							"amount = property to be sum, sm = field to be alias");
+				}
+				property = StringUtils.substringBetween(property,"sum(", ")").trim();
+				property = StringUtils.remove(property, SUM_).trim();			
+				projectionList.add(Projections.sum(getProperty(property)), separateProperties[1]);
+			}else if(StringUtils.startsWith(property, AVG) || StringUtils.startsWith(property, AVG_)){
+				separateProperties = StringUtils.split(property, ALIAS_TO);
+				if(separateProperties.length < 2){
+					throw new HCEErrorException("Projection Avg for syntax "+property+" is invalid, e.g : avg(amount)->average or @amount->average => " +
+							"amount = property to be average, average = field to be alias");
+				}
+				property = StringUtils.substringBetween(property,"avg(", ")").trim();
+				property = StringUtils.remove(property, AVG_).trim();			
+				projectionList.add(Projections.avg(getProperty(property)), separateProperties[1]);
+			}else if(StringUtils.startsWith(property, MAX) || StringUtils.startsWith(property, MAX_)){
+				separateProperties = StringUtils.split(property, ALIAS_TO);
+				if(separateProperties.length < 2){
+					throw new HCEErrorException("Projection Max for syntax "+property+" is invalid, e.g : max(amount)->mx or +amount->mx => " +
+							"amount = property to be max, mx = field to be alias");
+				}
+				property = StringUtils.substringBetween(property,"max(", ")").trim();
+				property = StringUtils.remove(property, MAX_).trim();			
+				projectionList.add(Projections.max(getProperty(property)), separateProperties[1]);
+			}else if(StringUtils.startsWith(property, MIN) || StringUtils.startsWith(property, MIN_)){
+				separateProperties = StringUtils.split(property, ALIAS_TO);
+				if(separateProperties.length < 2){
+					throw new HCEErrorException("Projection Min for syntax "+property+" is invalid, e.g : min(amount)->mn or -amount->mn => " +
+							"amount = property to be min, mn = field to be alias");
+				}
+				property = StringUtils.substringBetween(property,"min(", ")").trim();
+				property = StringUtils.remove(property, MIN_).trim();			
+				projectionList.add(Projections.min(getProperty(property)), separateProperties[1]);
+			}else if(StringUtils.startsWith(property, GROUP_BY) || StringUtils.startsWith(property, GROUP_BY_)){
+				separateProperties = StringUtils.split(property, ALIAS_TO);
+				if(separateProperties.length < 2){
+					throw new HCEErrorException("Projection Group By for syntax "+property+" is invalid, e.g : groupBy(country)->gb or #country->gb => " +
+							"country = property to be group by, gb = field to be alias");
+				}
+				property = StringUtils.substringBetween(property,"groupBy(", ")").trim();
+				property = StringUtils.remove(property, GROUP_BY_).trim();			
+				projectionList.add(Projections.groupProperty(getProperty(property)), separateProperties[1]);
 			}else{
-				newProperty = property;
-			}
-			projectionList.add(Projections.property(newProperty), StringUtils.replace(aliases[i], ".", "|"));
-			i++;
+				if(StringUtils.contains(property, ALIAS_TO)){
+					separateProperties = StringUtils.split(property,ALIAS_TO);
+					String [] newSeparateProperties = StringUtils.split(separateProperties[0],".");
+					if(newSeparateProperties.length > 2){
+						newProperty = getProperty(newSeparateProperties);			
+					}else if(newSeparateProperties.length == 2){
+						newProperty = getPropertyRemark(newSeparateProperties);
+					}else{
+						newProperty = property;
+					}
+					projectionList.add(Projections.property(newProperty), StringUtils.replace(separateProperties[1], ".", "|"));
+				}else{
+					separateProperties = StringUtils.split(property,".");
+					if(separateProperties.length > 2){
+						newProperty = getProperty(separateProperties);			
+					}else if(separateProperties.length == 2){
+						newProperty = getPropertyRemark(separateProperties);
+					}else{
+						newProperty = property;
+					}
+					projectionList.add(Projections.property(newProperty), StringUtils.replace(aliases[i], ".", "|"));
+				}
+				i++;
+			}			
 		}
 		return projectionList;
 	}
@@ -506,7 +576,12 @@ public class QueryUtils {
 			throw new HCEErrorException(e);
 		}
 		if(StringUtils.isEmpty(result)){
-			String getMethod = MethodUtils.getGetMethodName(fieldName);
+			String getMethod;
+			if(!boolean.class.equals(field.getType())){
+				getMethod  = MethodUtils.getGetMethodName(fieldName);
+			}else{
+				getMethod = "is" + StringUtils.capitalize(fieldName);
+			}
 			Class<?>[] parameterTypes = new Class<?>[0];
 			Annotation[] annotations;
 			try {
@@ -758,16 +833,17 @@ public class QueryUtils {
 							} 
 						}
 					}
-					Field[] fields = type.getDeclaredFields();
+					Field[] fields = ReflectionUtils.getInheritedPrivateFields(type);
 					for(int k=0; k<fields.length; k++){
 						Ignore ignore = fields[k].getAnnotation(Ignore.class);
-						if(ignore == null && ArrayUtils.contains(javaType, fields[k].getType().toString())){
+						Transient trans  = fields[k].getAnnotation(Transient.class);
+						if(ignore == null && trans == null && ArrayUtils.contains(javaType, fields[k].getType().toString()) || fields[k].getType().isEnum()){
 							projs = ArrayUtils.add(projs, StringUtils.replace(projections[i], "*", fields[k].getName()));
 						}
 					}
 					type = clazz;
 				}else{
-					Field[] fields = type.getDeclaredFields();
+					Field[] fields = ReflectionUtils.getInheritedPrivateFields(type);
 					for(int k=0; k<fields.length; k++){
 						Ignore ignore = fields[k].getAnnotation(Ignore.class);
 						Transient trans = fields[k].getAnnotation(Transient.class);

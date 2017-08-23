@@ -18,8 +18,10 @@ import org.slf4j.LoggerFactory;
 
 import softtech.hong.hce.criterion.BetweenPropertyExpression;
 import softtech.hong.hce.criterion.DateEqProperty;
+import softtech.hong.hce.criterion.MaxExpression;
 import softtech.hong.hce.criterion.MonthEqProperty;
 import softtech.hong.hce.criterion.PropertyBetweenExpression;
+import softtech.hong.hce.criterion.YearEqExpression;
 import softtech.hong.hce.exception.HCEErrorException;
 import softtech.hong.hce.model.Disjunction;
 import softtech.hong.hce.model.Expression;
@@ -158,7 +160,7 @@ public class CriterionUtils {
 			criterion = new DateEqProperty(expression.getPropertyName(), expression.getValue().toString(), expression.getValue1().toString());
 			break;
 		case NOT:
-			criterion = Restrictions.not(getCriterion(expression, clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria));
+			criterion = Restrictions.not(getCriterion(expression.getExpressions()[0], clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria));
 			break;
 		case PROPERTY_BETWEEN:
 			criterion = new PropertyBetweenExpression(expression.getPropertyName(), expression.getValue().toString(), expression.getValue1().toString());
@@ -168,8 +170,18 @@ public class CriterionUtils {
 			criterion = new BetweenPropertyExpression(expression.getPropertyName(), QueryUtils.getProperty(expression.getValue().toString()), 
 					QueryUtils.getProperty(expression.getValue1().toString()));
 			break;
+		case MAX:
+			criterion = new MaxExpression(expression.getPropertyName(), expression.getPropertyName(), QueryUtils.getTableName(clazz), 
+					Expression.eq(expression.getValue().toString(), expression.getValue1()));
+			break;
 		case MONTH_EQ:
 			criterion = new MonthEqProperty(expression.getPropertyName(), (Date) expression.getValue());
+			break;
+		case YEAR_EQ:
+			criterion = new YearEqExpression(expression.getPropertyName(), expression.getValue().toString());
+			break;
+		case SQL:
+			criterion = Restrictions.sqlRestriction("(" + expression.getValue().toString() + ")");
 			break;
 		default:
 			criterion = Restrictions.eq(expression.getPropertyName(), expression.getValue());
@@ -188,7 +200,9 @@ public class CriterionUtils {
 				buildJoinExpression(memberExpression, clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria);
 			}
 			break;
-
+		case NOT:
+			buildJoinIfNotAvailable(expression.getExpressions()[0].getPropertyName(), clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria);
+			break;
 		default:
 			buildJoinIfNotAvailable(expression.getPropertyName(), clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria);
 			break;
@@ -205,7 +219,9 @@ public class CriterionUtils {
 				buildJoinExpression(memberExpression, clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria);
 			}
 			break;
-
+		case NOT:
+			buildJoinIfNotAvailable(expression.getExpressions()[0].getPropertyName(), clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria);
+			break;
 		default:
 			buildJoinIfNotAvailable(expression.getValue().toString(), clazz, detachedCriteria, detachedCriteria2, hasAddedCriteria);
 			break;
@@ -214,77 +230,78 @@ public class CriterionUtils {
 	
 	public static void buildJoinIfNotAvailable(String propertyName, Class<?> clazz, DetachedCriteria detachedCriteria, DetachedCriteria detachedCriteria2, 
 			List<String> hasAddedCriteria){
-		
-		if(StringUtils.isEmpty(propertyName)){
-			throw new HCEErrorException("Empty field name, please check the expression property ");
-		}
-		
-		String[] props = StringUtils.split(propertyName, ".");
-		
-		int len = 0;
-		if(props != null) {
-			len = props.length;
-		}
-		
-		Class<?> type = clazz;
-		//has split name
-		if(len > 1){			
-			for (int i= 0; i < len -1; i++) {
-				Field field = null, childField = null;
-				if(i > 0){								
-					field = ReflectionUtils.findField(type, props[i-1]);
-					type = field.getType();
-				}
-				if(!hasAddedCriteria.contains(props[i] + i)){
-					if(i > 0){
-						try {
-							if(ReflectionUtils.isCollection(field.getType())){
-								 Type chieldType = field.getGenericType();   
-							        if (chieldType instanceof ParameterizedType) {  
-							            ParameterizedType pt = (ParameterizedType) chieldType;  
-							            type = (Class<?>) (pt.getActualTypeArguments()[0]); 
-							        }  
-							}									
-							childField = ReflectionUtils.findField(type, props[i]);
-						} catch (Exception e) {
-							log.error("cannot find field name : {}, class : {}", props[i], type.getCanonicalName());
-							throw new HCEErrorException("cannot find field name : "+props[i] +", class : "+ type.getCanonicalName(), e);
-						} 
-						JoinType joinType;
-						try {
-							joinType = QueryUtils.getJoinType(childField);
-						} catch (Exception e) {
-							log.error("cannot get join type field name : {}, class : {}", childField.getName(), type.getCanonicalName());
-							throw new HCEErrorException("cannot get join type field name : "+childField.getName() +", class : "+ type.getCanonicalName(), e);
-						} 			
-						// when deep two or more, alias index will be included
-						detachedCriteria.createAlias(props[i-1] + (i-1) + "." + props[i], props[i] + i, joinType);	
-						if(detachedCriteria2 != null){
-							detachedCriteria2.createAlias(props[i-1] + (i-1) + "." + props[i], props[i] + i, joinType);	
-						}
-					}else{	
-						try {
-							field = ReflectionUtils.findField(clazz, props[i]);
-						} catch (Exception e) {
-							log.error("cannot find field name : {} from class : {} ", props[i], clazz.getCanonicalName());
-							throw new HCEErrorException("cannot find field name : "+props[i] +", class : "+ clazz.getCanonicalName(), e);
-						} 
-						JoinType joinType;
-						try {
-							joinType = QueryUtils.getJoinType(field);
-						} catch (Exception e) {
-							log.error("cannot get join type field name : {}, class : {}", field.getName(), type.getCanonicalName());
-							throw new HCEErrorException("cannot get join type field name : "+field.getName() +", class : "+ type.getCanonicalName(), e);
-						} 
-						detachedCriteria.createAlias(props[i], props[i] + i, joinType);
-						if(detachedCriteria2 != null){
-							detachedCriteria2.createAlias(props[i], props[i] + i, joinType);
-						}
+		if(!"-sql-restriction-".equals(propertyName)){
+			if(StringUtils.isEmpty(propertyName)){
+				throw new HCEErrorException("Empty field name, please check the expression property ");
+			}
+			
+			String[] props = StringUtils.split(propertyName, ".");
+			
+			int len = 0;
+			if(props != null) {
+				len = props.length;
+			}
+			
+			Class<?> type = clazz;
+			//has split name
+			if(len > 1){			
+				for (int i= 0; i < len -1; i++) {
+					Field field = null, childField = null;
+					if(i > 0){								
+						field = ReflectionUtils.findField(type, props[i-1]);
+						type = field.getType();
 					}
-					hasAddedCriteria.add(props[i] + i);
-				}
-			}	
-		} 
+					if(!hasAddedCriteria.contains(props[i] + i)){
+						if(i > 0){
+							try {
+								if(ReflectionUtils.isCollection(field.getType())){
+									 Type chieldType = field.getGenericType();   
+								        if (chieldType instanceof ParameterizedType) {  
+								            ParameterizedType pt = (ParameterizedType) chieldType;  
+								            type = (Class<?>) (pt.getActualTypeArguments()[0]); 
+								        }  
+								}									
+								childField = ReflectionUtils.findField(type, props[i]);
+							} catch (Exception e) {
+								log.error("cannot find field name : {}, class : {}", props[i], type.getCanonicalName());
+								throw new HCEErrorException("cannot find field name : "+props[i] +", class : "+ type.getCanonicalName(), e);
+							} 
+							JoinType joinType;
+							try {
+								joinType = QueryUtils.getJoinType(childField);
+							} catch (Exception e) {
+								log.error("cannot get join type field name : {}, class : {}", childField.getName(), type.getCanonicalName());
+								throw new HCEErrorException("cannot get join type field name : "+childField.getName() +", class : "+ type.getCanonicalName(), e);
+							} 			
+							// when deep two or more, alias index will be included
+							detachedCriteria.createAlias(props[i-1] + (i-1) + "." + props[i], props[i] + i, joinType);	
+							if(detachedCriteria2 != null){
+								detachedCriteria2.createAlias(props[i-1] + (i-1) + "." + props[i], props[i] + i, joinType);	
+							}
+						}else{	
+							try {
+								field = ReflectionUtils.findField(clazz, props[i]);
+							} catch (Exception e) {
+								log.error("cannot find field name : {} from class : {} ", props[i], clazz.getCanonicalName());
+								throw new HCEErrorException("cannot find field name : "+props[i] +", class : "+ clazz.getCanonicalName(), e);
+							} 
+							JoinType joinType;
+							try {
+								joinType = QueryUtils.getJoinType(field);
+							} catch (Exception e) {
+								log.error("cannot get join type field name : {}, class : {}", field.getName(), type.getCanonicalName());
+								throw new HCEErrorException("cannot get join type field name : "+field.getName() +", class : "+ type.getCanonicalName(), e);
+							} 
+							detachedCriteria.createAlias(props[i], props[i] + i, joinType);
+							if(detachedCriteria2 != null){
+								detachedCriteria2.createAlias(props[i], props[i] + i, joinType);
+							}
+						}
+						hasAddedCriteria.add(props[i] + i);
+					}
+				}	
+			} 
+		}
 		
 	}
 }

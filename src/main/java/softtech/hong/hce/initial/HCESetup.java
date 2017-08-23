@@ -7,6 +7,8 @@ import java.util.Map;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.EntityManager;
+import javax.persistence.EntityManagerFactory;
 import javax.persistence.Id;
 import javax.persistence.PrimaryKeyJoinColumn;
 import javax.persistence.PrimaryKeyJoinColumns;
@@ -14,6 +16,7 @@ import javax.persistence.Table;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.dialect.Dialect;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
@@ -41,12 +44,18 @@ public class HCESetup {
 	
 	private SessionFactory sessionFactory;
 	
+	private EntityManagerFactory entityManagerFactory;
+	
 	/**
 	 * setting / assign Hibernate Session Factory to HCE
 	 * @param sessionFactory
 	 */
 	public void setSessionFactory(SessionFactory sessionFactory){
 		this.sessionFactory = sessionFactory;
+	}
+	
+	public void setEntityManagerFactory(EntityManagerFactory entityManagerFactory){
+		this.entityManagerFactory = entityManagerFactory;
 	}
 	
 //	public HCESetup() throws Exception {
@@ -58,36 +67,21 @@ public class HCESetup {
 	 * @throws Exception
 	 */
 	public void cacheTableNameForEntity() throws Exception{
-		Map<String, ClassMetadata> map = sessionFactory.getAllClassMetadata();
-		for (Iterator<?> iterator = map.keySet().iterator(); iterator.hasNext();) {
-			String key = (String) iterator.next();
-			if(((Object)map.get(key)) instanceof SingleTableEntityPersister){
-				SingleTableEntityPersister singleTableEntityPersister = (SingleTableEntityPersister)map.get(key);
-				putIdentifyProperty(key, singleTableEntityPersister.getIdentifierPropertyName());
-				putEntity(key, singleTableEntityPersister.getRootTableName());
-				putIdentifyColumnName(key, singleTableEntityPersister.getIdentifierColumnNames());
-				log.info("Map from Hibernate Entity {} to {}", key, singleTableEntityPersister.getRootTableName());
-			}else if(((Object)map.get(key)) instanceof JoinedSubclassEntityPersister){
-				JoinedSubclassEntityPersister joinedSubclassEntityPersister = (JoinedSubclassEntityPersister) map.get(key);
-				putIdentifyProperty(key, joinedSubclassEntityPersister.getIdentifierPropertyName());
-				putEntity(key, joinedSubclassEntityPersister.getRootTableName());
-				putIdentifyColumnName(key, joinedSubclassEntityPersister.getIdentifierColumnNames());
-				log.info("Map from Hibernate Entity {} to {}", key, joinedSubclassEntityPersister.getRootTableName());
-			}
+		if(sessionFactory != null){
+			cacheInfo(sessionFactory);
+		}else if(entityManagerFactory != null){
+			EntityManager entityManager = entityManagerFactory.createEntityManager();
+//			Metamodel metamodel = entityManager.getMetamodel();
+//			Set<EntityType<?>> entityTypes = metamodel.getEntities();
+//			for (EntityType<?> entityType : entityTypes) {
+//				System.out.println(ToStringBuilder.reflectionToString(entityType));
+//			}
+			Session session = (Session) entityManager.getDelegate();
+			cacheInfo(session.getSessionFactory());
+		}else {
+			throw new HCEErrorException("SessionFactory or EntityManagerFactory is null, you must set one of them");
 		}
-		Dialect dialect = ((SessionFactoryImplementor) sessionFactory).getDialect();
-		String dialectName = dialect.toString().toLowerCase();
-		if(StringUtils.contains(dialectName, "mysql")){
-			HCEConstant.DIALECT_TYPE = DialectType.MySQL;
-		}else if(StringUtils.contains(dialectName, "postgresql")){
-			HCEConstant.DIALECT_TYPE = DialectType.PostgreSQL;
-		}else if(StringUtils.contains(dialectName, "oracle")){
-			HCEConstant.DIALECT_TYPE = DialectType.Oracle;
-		}else if(StringUtils.contains(dialectName, "db2")){
-			HCEConstant.DIALECT_TYPE = DialectType.DB2;
-		}else{
-			HCEConstant.DIALECT_TYPE = DialectType.SAPDB;
-		}
+		
 	}
 	
 	public void cacheTableNameForEntity(Class<?>[] classes, DialectType dialectType) throws Exception{
@@ -185,5 +179,38 @@ public class HCESetup {
 		  } catch (Exception io) {
 			throw new HCEErrorException("Cannot read class from hibernate configuration xml caused by " + io.getMessage());
 		 }
+	}
+	
+	private void cacheInfo(SessionFactory sessionFactory){
+		Map<String, ClassMetadata> map = sessionFactory.getAllClassMetadata();
+		for (Iterator<?> iterator = map.keySet().iterator(); iterator.hasNext();) {
+			String key = (String) iterator.next();
+			if(((Object)map.get(key)) instanceof SingleTableEntityPersister){
+				SingleTableEntityPersister singleTableEntityPersister = (SingleTableEntityPersister)map.get(key);
+				putIdentifyProperty(key, singleTableEntityPersister.getIdentifierPropertyName());
+				putEntity(key, singleTableEntityPersister.getRootTableName());
+				putIdentifyColumnName(key, singleTableEntityPersister.getIdentifierColumnNames());
+				log.info("Map from Hibernate Entity {} to {}", key, singleTableEntityPersister.getRootTableName());
+			}else if(((Object)map.get(key)) instanceof JoinedSubclassEntityPersister){
+				JoinedSubclassEntityPersister joinedSubclassEntityPersister = (JoinedSubclassEntityPersister) map.get(key);
+				putIdentifyProperty(key, joinedSubclassEntityPersister.getIdentifierPropertyName());
+				putEntity(key, joinedSubclassEntityPersister.getRootTableName());
+				putIdentifyColumnName(key, joinedSubclassEntityPersister.getIdentifierColumnNames());
+				log.info("Map from Hibernate Entity {} to {}", key, joinedSubclassEntityPersister.getRootTableName());
+			}
+		}
+		Dialect dialect = ((SessionFactoryImplementor) sessionFactory).getDialect();
+		String dialectName = dialect.toString().toLowerCase();
+		if(StringUtils.contains(dialectName, "mysql")){
+			HCEConstant.DIALECT_TYPE = DialectType.MySQL;
+		}else if(StringUtils.contains(dialectName, "postgresql")){
+			HCEConstant.DIALECT_TYPE = DialectType.PostgreSQL;
+		}else if(StringUtils.contains(dialectName, "oracle")){
+			HCEConstant.DIALECT_TYPE = DialectType.Oracle;
+		}else if(StringUtils.contains(dialectName, "db2")){
+			HCEConstant.DIALECT_TYPE = DialectType.DB2;
+		}else{
+			HCEConstant.DIALECT_TYPE = DialectType.SAPDB;
+		}
 	}
 }

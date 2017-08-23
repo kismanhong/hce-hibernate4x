@@ -53,10 +53,15 @@ public class ExcludeExpression implements Criterion {
                 throw new HibernateException("propertyName may only be used with single-column properties");
             }
           
-            String[] projections = StringUtils.split(referencePropertyName, ".");
+            String[] projections;
+			try {
+				projections = StringUtils.split(referencePropertyName, ".");
+			} catch (Exception e1) {
+				throw new HibernateException("referencePropertyName must not be null");
+			}
             Field field, childField = null;
             Class<?> type = clazz;
-            if(projections.length > 1){
+            if(projections != null){
             	for(int i=0; i < projections.length; i++){
             		if(i > 0){
 						try {					
@@ -91,7 +96,14 @@ public class ExcludeExpression implements Criterion {
 						try {
 							field = ReflectionUtils.findField(clazz, projections[i]);
 							childField = field;
-							tableName = QueryUtils.getTableName(childField.getType().getCanonicalName());
+							tableName = QueryUtils.getTableName(clazz.getCanonicalName());
+							if(expressions != null){
+				            	columns = new String[expressions.length];
+				            	for (int j=0; j < expressions.length; j++) {
+									Expression expression = expressions[j];
+									columns[j] = QueryUtils.getColumnName(type, expression.getPropertyName());
+								}
+				            }
 						} catch (Exception e) {
 //							log.error("cannot find field name : {} from class : {} ", projections[i], clazz.getCanonicalName());
 							throw new HCEErrorException("cannot find field name : "+projections[i] +", class : "+ clazz.getCanonicalName(), e);
@@ -107,6 +119,10 @@ public class ExcludeExpression implements Criterion {
 					referenceColumn = ((JoinColumn) annotation).name();
 					break;
 				}
+            }
+            
+            if(StringUtils.isEmpty(referenceColumn)){
+            	referenceColumn = childField.getName();
             }
             
             if (referenceColumn == null) {

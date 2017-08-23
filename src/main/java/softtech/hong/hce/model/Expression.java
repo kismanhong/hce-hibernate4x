@@ -1,5 +1,7 @@
 package softtech.hong.hce.model;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -16,6 +18,9 @@ import softtech.hong.hce.type.RestrictionType;
  * this class is used for defining restriction of object's properties
  */
 public class Expression {
+	
+	private static SimpleDateFormat monthSdf = new SimpleDateFormat("MM");
+	
 	private String propertyName;
 	
 	private Object value;
@@ -68,13 +73,13 @@ public class Expression {
 		add(this);
 	}
 	
-	public Expression(Expression expression, Expression expression2){
-		this.expression = expression;
-		this.expression2 = expression2;
-		this.restrictionType = RestrictionType.OR;
-		this.junctionType = JunctionType.AND;
-		add(this);
-	}
+//	public Expression(Expression expression, Expression expression2){
+//		this.expression = expression;
+//		this.expression2 = expression2;
+//		this.restrictionType = RestrictionType.OR;
+//		this.junctionType = JunctionType.AND;
+//		add(this);
+//	}
 	
 	public Expression(String propertyName, Object value, RestrictionType restrictionType){
 		this.propertyName = propertyName;
@@ -206,6 +211,10 @@ public class Expression {
 		return new Expression(propertyName, value);
 	}
 	
+	public static Expression yearEq(String propertyName, Object value){
+		return new Expression(propertyName, value, RestrictionType.YEAR_EQ);
+	}
+	
 	public static Expression eqProperty(String leftProperty, String rightProperty){
 		return new Expression(leftProperty, rightProperty, RestrictionType.EQ_PROPERTY);
 	}
@@ -274,6 +283,10 @@ public class Expression {
 		return new Expression(propertyName, null, RestrictionType.NOT_NULL);
 	}
 	
+	public static Expression max(String propertyName, String referencePropertyName, Object value){
+		return new Expression(propertyName, referencePropertyName, value, RestrictionType.MAX);
+	}
+	
 	public static Expression isEmpty(String propertyName){
 		return new Expression(propertyName, null, RestrictionType.EMPTY);
 	}
@@ -309,6 +322,17 @@ public class Expression {
 	}
 	
 	public static Expression monthEq(String propertyName, Date date){
+		return new Expression(propertyName, date, RestrictionType.MONTH_EQ);
+	}
+	
+	public static Expression monthEq(String propertyName, int month){
+		Date date;
+		try {
+			date = monthSdf.parse(String.valueOf(month));
+		} catch (ParseException e) {
+			e.printStackTrace();
+			date = new Date();
+		}
 		return new Expression(propertyName, date, RestrictionType.MONTH_EQ);
 	}
 	
@@ -381,6 +405,10 @@ public class Expression {
 	
 	public static Expression not(Expression expression){
 		return new Expression(RestrictionType.NOT, expression);
+	}
+	
+	public static Expression sql(String sql){
+		return new Expression("-sql-restriction-", sql, RestrictionType.SQL);
 	}
 	
 	public void setExpressions(Expression...expressions){

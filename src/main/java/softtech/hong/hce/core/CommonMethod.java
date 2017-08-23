@@ -7,6 +7,7 @@ import java.util.HashMap;
 import javax.persistence.Column;
 import javax.persistence.JoinColumn;
 import javax.persistence.JoinTable;
+import javax.persistence.OneToOne;
 import javax.persistence.PrimaryKeyJoinColumn;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -51,6 +52,10 @@ public abstract class CommonMethod {
 				if(((Column) annotation).nullable()){
 					return JoinType.LEFT_OUTER_JOIN;
 				}
+			}else if(annotation instanceof OneToOne){
+				if(((OneToOne) annotation).optional()){
+					return JoinType.LEFT_OUTER_JOIN;
+				}
 			}
 		}
 		return JoinType.INNER_JOIN;
@@ -82,6 +87,10 @@ public abstract class CommonMethod {
 				}
 			}else if(annotation instanceof Column){
 				if(((Column) annotation).nullable()){
+					return JoinType.LEFT_OUTER_JOIN;
+				}
+			}else if(annotation instanceof OneToOne){
+				if(((OneToOne) annotation).optional()){
 					return JoinType.LEFT_OUTER_JOIN;
 				}
 			}

@@ -38,5 +38,9 @@ public enum RestrictionType {
 	SIZE_LE,
 	DATE_EQ,
 	NOT,
-	EQ_OR_IS_NULL
+	EQ_OR_IS_NULL,
+	SQL,
+	MAX,
+	MIN,
+	YEAR_EQ;
 }

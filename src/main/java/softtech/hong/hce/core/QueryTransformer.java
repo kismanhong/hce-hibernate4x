@@ -12,6 +12,7 @@ import javax.persistence.Transient;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.hibernate.FetchMode;
 import org.hibernate.criterion.DetachedCriteria;
 import org.hibernate.criterion.MatchMode;
 import org.hibernate.criterion.Projections;
@@ -51,11 +52,28 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	private Class<?> parentClass;
 
 	@SuppressWarnings("unchecked")
-	private Class<T> getDomainClass() {
-	    if (domainClass == null) {
-	    	ParameterizedType thisType = (ParameterizedType) getClass().getGenericSuperclass();
-	        domainClass = (Class<T>) thisType.getActualTypeArguments()[0];
-	    }
+	protected Class<T> getDomainClass() {
+//	    if (domainClass == null) {
+//	    	ParameterizedType thisType = (ParameterizedType) getClass().getGenericSuperclass();
+//	        domainClass = (Class<T>) thisType.getActualTypeArguments()[0];
+//	    }
+//	    return domainClass;
+	    
+		if(domainClass == null){
+		    Type genericSuperClass = getClass().getGenericSuperclass();
+	
+		    ParameterizedType parametrizedType = null;
+		    while (parametrizedType == null) {
+		        if ((genericSuperClass instanceof ParameterizedType)) {
+		            parametrizedType = (ParameterizedType) genericSuperClass;
+		        } else {
+		            genericSuperClass = ((Class<?>) genericSuperClass).getGenericSuperclass();
+		        }
+		    }
+	
+		    domainClass = (Class<T>) parametrizedType.getActualTypeArguments()[0];
+		}
+	    
 	    return domainClass;
 	}
 	
@@ -121,7 +139,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @throws {@link HCEErrorException}
 	 */
 	protected DetachedCriteria[] queryTransformer(Object object, String[] projections, boolean enableLike, String[] addJoins, Order... orders) throws HCEErrorException {	
-		return queryTransformer(object, projections, new String[]{}, null, false, enableLike, orders);
+		return queryTransformer(object, projections, new String[]{}, addJoins, false, enableLike, orders);
 	}
 	
 	/**
@@ -148,13 +166,30 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @throws {@link HCEErrorException}
 	 */
 	protected DetachedCriteria[] queryTransformer(Object object, String[] projections, String[] ignoreProperties, String[] addJoins, boolean ignoreSensitive, 
-			boolean enableLike, Order... orders) throws HCEErrorException {
+			boolean enableLike, Order... orders) throws HCEErrorException{
+		return queryTransformer(object, projections, ignoreProperties, addJoins, ignoreSensitive, 
+				enableLike, null, orders);
+	}
+	
+	/**
+	 * this method is used for paging purpose, when the object is not null the search will be applied to every property that is not empty.
+	 * @param object -> filter object, where clause based on property that is not null or not ignored
+	 * @param projections -> field(s) to be selected
+	 * @param ignoreProperties -> field or property to be ignored when filtering
+	 * @param ignoreSensitive -> if true : field / property to be ignored must be completely spell, if false : only by checking index of
+	 * @param enableLike -> if you wanna enable like in where statement, set to true
+	 * @param orders -> order(s) parameters, sequential
+	 * @return -> Array of {@link DetachedCriteria} => one for count, the other for select
+	 * @throws {@link HCEErrorException}
+	 */
+	protected DetachedCriteria[] queryTransformer(Object object, String[] projections, String[] ignoreProperties, String[] addJoins, boolean ignoreSensitive, 
+			boolean enableLike,  HashMap<String, JoinType> joinOverrrides, Order... orders) throws HCEErrorException {
 		try {
 			DetachedCriteria searchCriteria = DetachedCriteria.forClass(domainClass, QueryConstant.ALIAS);
 			DetachedCriteria countCriteria = DetachedCriteria.forClass(domainClass, QueryConstant.ALIAS);
 			
 			projections = QueryUtils.restructureProjections(domainClass, projections);  // if projections contain *, will be extracted from fields
-			queryTransformation(domainClass, searchCriteria, countCriteria, object, orders, projections, ignoreProperties, addJoins, ignoreSensitive, enableLike);
+			queryTransformation(domainClass, searchCriteria, countCriteria, object, orders, projections, ignoreProperties, addJoins, ignoreSensitive, enableLike, joinOverrrides);
 			if(projections != null && projections.length > 0){						
 				searchCriteria.setProjection(QueryUtils.getInstance().buildProjections(projections));
 				searchCriteria.setResultTransformer(HCETransformers.aliasToBean(domainClass));
@@ -185,6 +220,22 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	/**
 	 * this method is used for paging purpose, when the object is not null the search will be applied to every property that is not empty.
 	 * @param object -> filter object, where clause based on property that is not null or not ignored
+	 * @param projections -> field(s) to be selected
+	 * @param ignoreProperties -> field or property to be ignored when filtering
+	 * @param ignoreSensitive -> if true : field / property to be ignored must be completely spell, if false : only by checking index of
+	 * @param enableLike -> if you wanna enable like in where statement, set to true
+	 * @param orders -> order(s) parameters, sequential
+	 * @return -> Array of {@link DetachedCriteria} => one for count, the other for select
+	 * @throws {@link HCEErrorException}
+	 */
+	protected DetachedCriteria[] queryTransformer(Object object, String[] projections, String[] ignoreProperties, boolean ignoreSensitive, 
+			boolean enableLike, String[] addJoins, Order... orders) throws HCEErrorException {
+		return queryTransformer(object, projections, ignoreProperties, addJoins, ignoreSensitive, enableLike, orders);
+	}
+	
+	/**
+	 * this method is used for paging purpose, when the object is not null the search will be applied to every property that is not empty.
+	 * @param object -> filter object, where clause based on property that is not null or not ignored
 	 * @param clazz -> class to be selected and returned
 	 * @param orders -> order(s) parameters, sequential
 	 * @param projections -> field(s) to be selected
@@ -195,12 +246,28 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 */
 	protected DetachedCriteria[] queryTransformer(Class<?> clazz, Object object, 
 			String[] projections, String[] ignoreProperties, boolean enableLike, Order... orders) throws HCEErrorException {
+		return queryTransformer( clazz, object, projections, ignoreProperties, enableLike, null, orders);
+	}
+	
+	/**
+	 * this method is used for paging purpose, when the object is not null the search will be applied to every property that is not empty.
+	 * @param object -> filter object, where clause based on property that is not null or not ignored
+	 * @param clazz -> class to be selected and returned
+	 * @param orders -> order(s) parameters, sequential
+	 * @param projections -> field(s) to be selected
+	 * @param ignoreProperties -> field or property to be ignored when filtering
+	 * @param enableLike -> if you wanna enable like in where statement, set to true
+	 * @return -> Array of {@link DetachedCriteria} => one for count, the other for select
+	 * @throws {@link HCEErrorException}
+	 */
+	protected DetachedCriteria[] queryTransformer(Class<?> clazz, Object object, 
+			String[] projections, String[] ignoreProperties, boolean enableLike, HashMap<String, JoinType> joinOverrides, Order... orders) throws HCEErrorException {
 		try {
 			DetachedCriteria criteria = DetachedCriteria.forClass(clazz, QueryConstant.ALIAS);
 			DetachedCriteria countCriteria = DetachedCriteria.forClass(clazz, QueryConstant.ALIAS);
 			
 			projections = QueryUtils.restructureProjections(clazz, projections);  // if projections contain *, will be extracted from fields
-			queryTransformation(clazz, criteria, countCriteria, object, orders, projections, ignoreProperties, null, enableLike, false);	
+			queryTransformation(clazz, criteria, countCriteria, object, orders, projections, ignoreProperties, null, enableLike, false, joinOverrides);	
 			if(projections != null && projections.length > 0){
 				criteria.setProjection(QueryUtils.getInstance().buildProjections(projections));
 				criteria.setResultTransformer(HCETransformers.aliasToBean(clazz));
@@ -326,11 +393,23 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @throws Exception 
 	 */
 	protected DetachedCriteria criteriaById (Class<?> clazz, String[] projections, Long id) throws HCEErrorException{
+		return criteriaById(clazz, projections, id, null);
+	}
+	
+	/**
+	 * used for querying object using id and return object will be clazz parameter
+	 * @param clazz -> class to be selected / queried and returned
+	 * @param projections -> field(s) to be selected
+	 * @param id -> object identity value
+	 * @return -> {@link DetachedCriteria}
+	 * @throws Exception 
+	 */
+	protected DetachedCriteria criteriaById (Class<?> clazz, String[] projections, Long id, HashMap<String, JoinType> joinOverrides) throws HCEErrorException{
 		DetachedCriteria criteria = DetachedCriteria.forClass(clazz, QueryConstant.ALIAS);
 		List<String> hasAddedCriteria = new ArrayList<String>();
 		
 		projections = QueryUtils.restructureProjections(clazz, projections);  // if projections contain *, will be extracted from fields
-		fetchProjections(clazz, projections, hasAddedCriteria, criteria);
+		fetchProjections(clazz, projections, hasAddedCriteria, criteria, joinOverrides);
 		criteria.add(Restrictions.eq(QueryConstant.ALIAS + "." + QueryUtils.getIdentifier(clazz.getCanonicalName()), id));
 		if(projections != null && projections.length > 0){
 			criteria.setProjection(QueryUtils.getInstance().buildProjections(projections));
@@ -347,7 +426,18 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @throws Exception 
 	 */
 	protected DetachedCriteria criteriaById (String[] projections, Long id) throws HCEErrorException{
-		return criteriaById(domainClass, projections, id);
+		return criteriaById(domainClass, projections, id, null);
+	}
+	
+	/**
+	 * used for querying object using id and return domainClass
+	 * @param projections -> field(s) to be selected
+	 * @param id -> object identity value
+	 * @return -> {@link DetachedCriteria}
+	 * @throws Exception 
+	 */
+	protected DetachedCriteria criteriaById (String[] projections, Long id, HashMap<String, JoinType> joinOverrides) throws HCEErrorException{
+		return criteriaById(domainClass, projections, id, joinOverrides);
 	}
 	
 	/**
@@ -640,6 +730,19 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @return -> {@link DetachedCriteria}
 	 * @throws {@link HCEErrorException}
 	 */
+	protected DetachedCriteria criteriaByProperty(Class<?> clazz, String[] projections, Expression expression, Order... orders) throws HCEErrorException{
+		return criteriaByProperty(clazz, clazz, projections, projections, new Expression[]{ expression }, orders);
+	}
+	
+	/**
+	 * select based on clazz and return it to clazz, filter based on restriction(s) are given and return as collection of clazz
+	 * @param clazz -> class to be selected / queried
+	 * @param projections -> field(s) to be selected
+	 * @param expressions -> constraint or restrictions, can be more than one, use add method in {@link Expression} class
+	 * @param orders -> order(s) parameters, sequential	
+	 * @return -> {@link DetachedCriteria}
+	 * @throws {@link HCEErrorException}
+	 */
 	protected DetachedCriteria criteriaByProperty(Class<?> clazz, String[] projections, Expression[] expressions, Order... orders) throws HCEErrorException{
 		return criteriaByProperty(clazz, clazz, projections, projections, expressions, orders);
 	}
@@ -705,7 +808,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @throws {@link HCEErrorException} 
 	 */
 	protected DetachedCriteria criteriaWithProjections (Class<?> clazz, String[] projections, Order... orders) throws HCEErrorException{
-		return criteriaByProperty(clazz, projections, null, orders);
+		return criteriaByProperty(clazz, projections, new Expression[] {}, orders);
 	}
 
 	/**
@@ -799,6 +902,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 							JoinType joinType = QueryUtils.getJoinType(parentClass, fieldName);
 							hasAddedCriteria.add(alias + (level-1));
 							searchCriteria.createAlias(QueryConstant.ALIAS + "." + alias, alias + (level-1), joinType);
+							searchCriteria.setFetchMode(QueryConstant.ALIAS + "." + alias, FetchMode.JOIN);
 							countCriteria.createAlias(QueryConstant.ALIAS + "." + alias, alias + (level-1), joinType);
 							log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), QueryConstant.ALIAS + "." + alias, alias + (level-1) );
 						}
@@ -807,6 +911,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 							JoinType joinType = QueryUtils.getJoinType(parentClass, fieldName);
 							hasAddedCriteria.add(alias + (level-1));
 							searchCriteria.createAlias(parentAlias + (level-2) + "." + alias, alias + (level-1), joinType);
+							searchCriteria.setFetchMode(parentAlias + (level-2) + "." + alias, FetchMode.JOIN);
 							countCriteria.createAlias(parentAlias + (level-2) + "." + alias, alias + (level-1), joinType);
 							log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), parentAlias + (level-2) + "." + alias, alias + (level-1) );
 						}
@@ -815,6 +920,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 							JoinType joinType = QueryUtils.getJoinType(parentClass, fieldName);
 							hasAddedCriteria.add(alias + (level-1));
 							searchCriteria.createAlias(parentAlias + (level-2) + "." + alias, alias + (level-1), joinType);
+							searchCriteria.setFetchMode(parentAlias + (level-2) + "." + alias, FetchMode.JOIN);
 							countCriteria.createAlias(parentAlias + (level-2) + "." + alias, alias + (level-1), joinType);
 							log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), (parentAlias + (level-2)) + "." + alias, alias + (level-1) );
 							
@@ -886,11 +992,12 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * @throws {@link HCEErrorException}
 	 */
 	private void queryTransformation(Class<?> clazz, DetachedCriteria searchCriteria, DetachedCriteria countCriteria, Object object, 
-			Order[] orders, String[] projections, String[] ignoreProperties, String[] addJoins, boolean ignoreSensitive, boolean enableLike) throws HCEErrorException{
+			Order[] orders, String[] projections, String[] ignoreProperties, String[] addJoins, boolean ignoreSensitive, boolean enableLike, 
+			HashMap<String, JoinType> joinOverrides) throws HCEErrorException{
 		try{
 			List<String> hasAddedCriteria = new ArrayList<String>();
 			if(projections != null && projections.length > 0){
-				hasAddedCriteria = joinBuilder(searchCriteria, countCriteria, orders, projections, clazz, null);
+				hasAddedCriteria = joinBuilder(searchCriteria, countCriteria, orders, projections, clazz, joinOverrides, addJoins);
 			}
 			parentClass = clazz;
 			if(object != null){
@@ -922,7 +1029,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 	 * detect association and create the join
 	 */
 	private List<String> joinBuilder(DetachedCriteria searchCriteria, DetachedCriteria countCriteria,
-			Order[] orders, String[] projections, Class<?> theClass, HashMap<String, JoinType> joinOverrides) throws HCEErrorException{
+			Order[] orders, String[] projections, Class<?> theClass, HashMap<String, JoinType> joinOverrides, String[] addJoins) throws HCEErrorException{
 		try{			
 			/* when projections define inner class property/s, then join the table to avoid cannot resolved property */
 			String[] separateProperties;
@@ -935,31 +1042,51 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 				separateProperties = StringUtils.split(property, ".");
 				if(separateProperties.length > 1){
 					for(int i = 0; i < separateProperties.length - 1; i++){
-						if(!hasAddedCriteria.contains(separateProperties[i] + i)){	
-							//see parent join type e.g: Leave.nextApproval.employee 
-							//when join to employee we must get the join type nextApproval to Leave
-							JoinType joinType = QueryUtils.getJoinType(cacheClass, separateProperties[i]);
-							if(i == 0){
-								detachedCriteria = searchCriteria.createAlias(separateProperties[0], separateProperties[0] + 0, joinType);
-								detachedCountCriteria = countCriteria.createAlias(separateProperties[0], separateProperties[0] + 0, joinType);								
-							}else{
-								detachedCriteria.createAlias(separateProperties[i-1] + (i - 1) + "." + separateProperties[i], separateProperties[i] + i, joinType);	
-								detachedCountCriteria.createAlias(separateProperties[i-1] + (i - 1) +"." + separateProperties[i], separateProperties[i] + i, joinType);	
-							}
-							hasAddedCriteria.add(separateProperties[i] + i);
-							log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), separateProperties[i] + i);
-						}
-							
-						Field field = ReflectionUtils.findField(cacheClass, separateProperties[i]);
-						cacheClass = field.getType();
-						if (Collection.class.isAssignableFrom(cacheClass)) {		
-							Type chieldType = field.getGenericType();   
-						    if (chieldType instanceof ParameterizedType) {  
-						        ParameterizedType pt = (ParameterizedType) chieldType;  
-						        cacheClass = (Class<?>) (pt.getActualTypeArguments()[0]); 
-						    }  
-						}	
+						cacheClass = joinDefinition(cacheClass, separateProperties, i, detachedCountCriteria, detachedCriteria, hasAddedCriteria, joinOverrides);
+						
+//						if(!hasAddedCriteria.contains(separateProperties[i] + i)){	
+//							//see parent join type e.g: Leave.nextApproval.employee 
+//							//when join to employee we must get the join type nextApproval to Leave
+//							JoinType joinType;
+//							if(joinOverrides != null && joinOverrides.containsKey(separateProperties[i])){
+//								joinType = joinOverrides.get(separateProperties[i]);
+//							}else{
+//								joinType = QueryUtils.getJoinType(cacheClass, separateProperties[i]);
+//							}
+//							
+//							if(i == 0){
+//								detachedCriteria = searchCriteria.createAlias(separateProperties[0], separateProperties[0] + 0, joinType);
+//								detachedCountCriteria = countCriteria.createAlias(separateProperties[0], separateProperties[0] + 0, joinType);								
+//							}else{
+//								detachedCriteria.createAlias(separateProperties[i-1] + (i - 1) + "." + separateProperties[i], separateProperties[i] + i, joinType);	
+//								detachedCountCriteria.createAlias(separateProperties[i-1] + (i - 1) +"." + separateProperties[i], separateProperties[i] + i, joinType);	
+//							}
+//							hasAddedCriteria.add(separateProperties[i] + i);
+//							log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), separateProperties[i] + i);
+//						}
+//							
+//						Field field = ReflectionUtils.findField(cacheClass, separateProperties[i]);
+//						cacheClass = field.getType();
+//						if (Collection.class.isAssignableFrom(cacheClass)) {		
+//							Type chieldType = field.getGenericType();   
+//						    if (chieldType instanceof ParameterizedType) {  
+//						        ParameterizedType pt = (ParameterizedType) chieldType;  
+//						        cacheClass = (Class<?>) (pt.getActualTypeArguments()[0]); 
+//						    }  
+//						}	
 					}					
+				}
+			}
+			
+			if(addJoins != null){
+				for(String joinAssociation : addJoins){
+					cacheClass = theClass;
+					separateProperties = StringUtils.split(joinAssociation, ".");
+					if(separateProperties.length > 1){
+						for(int i = 0; i < separateProperties.length; i++){
+							cacheClass = joinDefinition(cacheClass, separateProperties, i, detachedCountCriteria, detachedCriteria, hasAddedCriteria, joinOverrides);
+						}
+					}
 				}
 			}
 			
@@ -968,6 +1095,56 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 		} catch (Exception e) {
 			throw new HCEErrorException(e);
 		}
+	}
+	
+	private Class<?> joinDefinition(Class<?> cacheClass, String[] separateProperties, int i,  DetachedCriteria detachedCountCriteria, DetachedCriteria detachedCriteria, 
+			List<String> hasAddedCriteria, HashMap<String, JoinType> joinOverrides) throws SecurityException, NoSuchFieldException{
+		if(!hasAddedCriteria.contains(separateProperties[i] + i)){	
+			//see parent join type e.g: Leave.nextApproval.employee 
+			//when join to employee we must get the join type nextApproval to Leave
+			JoinType joinType;
+			if(joinOverrides != null && joinOverrides.containsKey(separateProperties[i])){
+				joinType = joinOverrides.get(separateProperties[i]);
+			}else{
+				joinType = QueryUtils.getJoinType(cacheClass, separateProperties[i]);
+			}
+			
+			if(i == 0){
+				detachedCriteria.createAlias(separateProperties[0], separateProperties[0] + 0, joinType);
+				detachedCriteria.setFetchMode(separateProperties[0], FetchMode.JOIN);
+				
+				detachedCountCriteria.createAlias(separateProperties[0], separateProperties[0] + 0, joinType);								
+			}else{
+				detachedCriteria.createAlias(separateProperties[i-1] + (i - 1) + "." + separateProperties[i], separateProperties[i] + i, joinType);
+				detachedCriteria.setFetchMode(separateProperties[i-1] + (i - 1) + "." + separateProperties[i], FetchMode.JOIN);
+				detachedCountCriteria.createAlias(separateProperties[i-1] + (i - 1) +"." + separateProperties[i], separateProperties[i] + i, joinType);	
+			}
+			hasAddedCriteria.add(separateProperties[i] + i);
+			log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), separateProperties[i] + i);
+		}
+			
+		Field field = ReflectionUtils.findField(cacheClass, separateProperties[i]);
+		cacheClass = field.getType();
+		if (Collection.class.isAssignableFrom(cacheClass)) {		
+			Type chieldType = field.getGenericType();   
+		    if (chieldType instanceof ParameterizedType) {  
+		        ParameterizedType pt = (ParameterizedType) chieldType;  
+		        cacheClass = (Class<?>) (pt.getActualTypeArguments()[0]); 
+		    }  
+		}
+		
+		return cacheClass;
+	}
+	
+	/**
+	 * @param clazz
+	 * @param properties
+	 * @param hasAddedCriteria
+	 * @param criteria
+	 * @throws {@link HCEErrorException}
+	 */
+	private void fetchProjections(Class<?> clazz, String[] properties, List<String> hasAddedCriteria, DetachedCriteria criteria, HashMap<String, JoinType> joinOverrides) throws HCEErrorException{
+		fetchProjections(clazz, properties, hasAddedCriteria, criteria, null, joinOverrides);
 	}
 	
 	/**
@@ -1025,6 +1202,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 									throw new HCEErrorException("cannot get join type field name : "+childField.getName() +", class : "+ type.getCanonicalName(), e);
 								} 
 								criteria = criteria.createAlias(projections[i-1] + (i-1) + "." + projections[i], projections[i] + i, joinType);
+								criteria.setFetchMode(projections[i-1] + (i-1) + "." + projections[i], FetchMode.JOIN);
 								if(countCriteria != null){
 									countCriteria = countCriteria.createAlias(projections[i-1] + (i-1) + "." + projections[i], projections[i] + i, joinType);
 								}
@@ -1045,6 +1223,7 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 									throw new HCEErrorException("cannot get join type field name : "+field.getName() +", class : "+ type.getCanonicalName(), e);
 								} 
 								criteria = criteria.createAlias(projections[i], projections[i] + i, joinType);
+								criteria.setFetchMode(projections[i], FetchMode.JOIN);
 								if(countCriteria != null){
 									countCriteria = countCriteria.createAlias(projections[i], projections[i] + i, joinType);
 								}
@@ -1136,7 +1315,8 @@ public abstract class QueryTransformer<T> extends QueryTransformerExt{
 										throw new HCEErrorException("cannot get join type field name : "+childField.getName() +", class : "+ type.getCanonicalName(), e);
 									} 
 									// when deep two or more, alias index will be included
-									detachedCriteria.createAlias(projections[i-1] + (i-1) + "." + projections[i], projections[i] + i, joinType);	
+									detachedCriteria.createAlias(projections[i-1] + (i-1) + "." + projections[i], projections[i] + i, joinType);
+//									detachedCriteria.setFetchMode(projections[i-1] + (i-1) + "." + projections[i], FetchMode.JOIN);
 									log.info("{} Join to : {}", QueryUtils.getJoinName(joinType), projections[i] + i);
 								}else{			
 									Field field = null;
